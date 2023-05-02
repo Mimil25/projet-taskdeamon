@@ -9,16 +9,15 @@
 
 int send_string(int fd, char* str) {
     size_t len = strlen(str);
-    size_t wlen;
-    wlen = write(fd, &len, sizeof(len));
-    if(wlen == -1) {
+    size_t wlen = write(fd, &len, sizeof(len));
+    if(wlen == (size_t)(-1)) {
         fprintf(stderr, "Error: write to %d failed, %s\n", fd, strerror(errno));
         return -1;
     }
     wlen = 0;
     while (wlen < len) {
         size_t w = write(fd, &str[wlen], len - wlen);
-        if(w == -1) {
+        if(w == (size_t)(-1)) {
             fprintf(stderr, "Error: write to %d failed, %s\n", fd, strerror(errno));
             return -1;
         }
@@ -30,7 +29,7 @@ int send_string(int fd, char* str) {
 char* recv_string(int fd) {
     size_t len;
     size_t rlen = read(fd, &len, sizeof(len));
-    if(rlen == -1) {
+    if(rlen == (size_t)(-1)) {
         fprintf(stderr, "Error: read from %d failed, %s\n", fd, strerror(errno));
         return NULL;
     } else if (rlen == 0) {
@@ -48,7 +47,7 @@ char* recv_string(int fd) {
     rlen = 0;
     while (rlen < len) {
         size_t r = read(fd, &buf[rlen], len - rlen);
-        if(r == -1) {
+        if(r == (size_t)(-1)) {
             fprintf(stderr, "Error: read from %d failed, %s\n", fd, strerror(errno));
             return NULL;
         } else if (r == 0) {
@@ -65,11 +64,11 @@ int send_argv(int fd, char* argv[]) {
     size_t len = 0;
     while(argv[len]) ++len;
     size_t wlen = write(fd, &len, sizeof(len));
-    if(wlen == -1) {
+    if(wlen == (size_t)(-1)) {
         fprintf(stderr, "Error: write to %d failed, %s\n", fd, strerror(errno));
         return -1;
     }
-    for(int i=0; i < len; ++i) {
+    for(size_t i=0; i < len; ++i) {
         size_t w = send_string(fd, argv[i]);
         wlen += w;
     }
@@ -79,7 +78,7 @@ int send_argv(int fd, char* argv[]) {
 char** recv_argv(int fd){
     size_t len;
     size_t rlen = read(fd, &len, sizeof(len));
-    if(rlen == -1) {
+    if(rlen == (size_t)(-1)) {
         fprintf(stderr, "Error: read from %d failed, %s\n", fd, strerror(errno));
         return NULL;
     } else if (rlen == 0) {
@@ -94,7 +93,7 @@ char** recv_argv(int fd){
         fprintf(stderr, "Error: failed alloc of %lu bytes, %s\n", (len + 1)*sizeof(char*), strerror(errno));
         return NULL;
     }
-    for(int i=0; i < len; ++i) {
+    for(size_t i=0; i < len; ++i) {
         argv[i] = recv_string(fd);
     }
     return argv;
