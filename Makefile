@@ -1,4 +1,4 @@
-C = clang -Wall -Wextra -pedantic -g -ggdb -O0 -std=c99
+C = clang -Wall -Wextra -pedantic -g -gdwarf-4 -O0 -std=c99
 
 init:
 	mkdir bin
@@ -14,13 +14,14 @@ when:
 	$C src/when.c -o bin/when
 
 libmessage:
-	$C -shared src/message.c -o lib/libmessage.so
+	$C -c -fpic src/message.c -o lib/message.o
+	$C -shared lib/message.o -o lib/libmessage.so
 
 test: test_libmessage
 
 test_libmessage: libmessage
-	$C src/message.c test/src/test_message_a.c -o test/bin/test_message_a
-	$C src/message.c test/src/test_message_b.c -o test/bin/test_message_b
+	$C lib/message.o test/src/test_message_a.c -o test/bin/test_message_a
+	$C lib/message.o test/src/test_message_b.c -o test/bin/test_message_b
 
 clean:
 	rm -rf bin/
