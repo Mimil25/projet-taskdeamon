@@ -5,7 +5,7 @@ init:
 	mkdir lib
 	mkdir test/bin
 
-all: time when libmessage taskcli
+all: time when libmessage taskd taskcli
 
 time:
 	$C src/time.c -o bin/time
@@ -17,7 +17,11 @@ libmessage:
 	$C -c -fpic src/message.c -o lib/message.o
 	$C -shared lib/message.o -o lib/libmessage.so
 
-taskcli:
+
+taskd: libmessage
+	$C lib/message.o src/taskd.c -o bin/taskd
+
+taskcli: libmessage
 	$C lib/message.o src/taskcli.c -o bin/taskcli
 
 test: test_libmessage
