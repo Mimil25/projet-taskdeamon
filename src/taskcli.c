@@ -18,7 +18,39 @@ int main(int argc, char** argv) {
     }
 
     if(argc == 1){
-        //lire fichier /tmp/tasks.txt
+        int fd = open("/tmp/tasks.txt",O_RDONLY);
+        if (fd == -1) {
+            perror("Error opening tasks.txt");
+            return 1;
+        }
+        static struct flock lock;
+        lock.l_type = F_WRLCK;
+        lock.l_whence = SEEK_SET;
+        lock.l_start = 0;
+        lock.l_len = 0;
+        fcntl ( fd , F_SETLKW , &lock );
+
+        char buf[256];
+
+        int taille = lseek(fd,0,SEEK_END);
+        lseek(fd,0,SEEK_SET);
+        
+        if(taille==0){
+            fprintf(stdout,"No command to run.\n");
+            return 0;
+        }
+
+        size_t sz=-1;
+
+        fprintf(stdout,"Commands to run :\n");
+        while(sz!=0){
+            sz=read(fd,&buf,256*sizeof(char));
+            write(1,&buf,sz*sizeof(char));
+        }
+
+        lock.l_type = F_UNLCK;
+        fcntl ( fd , F_SETLKW , &lock );
+        return 0;
     }
 
     FILE * fPidTaskD = fopen("/tmp/taskd.pid", "r");
