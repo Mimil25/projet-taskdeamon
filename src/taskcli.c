@@ -1,3 +1,4 @@
+#include <time.h>
 #define _POSIX_SOURCE
 #include "message.h"
 #include <stdio.h>
@@ -18,16 +19,17 @@ int main(int argc, char** argv) {
     }
 
     if(argc == 1){
+        static struct flock lock;
+        lock.l_type = F_RDLCK;
+        lock.l_whence = SEEK_SET;
+        lock.l_start = 0;
+        lock.l_len = 0;
+        
         int fd = open("/tmp/tasks.txt",O_RDONLY);
         if (fd == -1) {
             perror("Error opening tasks.txt");
             return 1;
         }
-        static struct flock lock;
-        lock.l_type = F_WRLCK;
-        lock.l_whence = SEEK_SET;
-        lock.l_start = 0;
-        lock.l_len = 0;
         fcntl ( fd , F_SETLKW , &lock );
 
         char buf[256];
@@ -37,6 +39,9 @@ int main(int argc, char** argv) {
         
         if(taille==0){
             fprintf(stdout,"No command to run.\n");
+            lock.l_type = F_UNLCK;
+            fcntl ( fd , F_SETLKW , &lock );
+            close(fd);
             return 0;
         }
 
@@ -50,6 +55,7 @@ int main(int argc, char** argv) {
 
         lock.l_type = F_UNLCK;
         fcntl ( fd , F_SETLKW , &lock );
+        close(fd);
         return 0;
     }
 
@@ -64,7 +70,7 @@ int main(int argc, char** argv) {
 
     char *end = NULL;
 
-    int start = strtol(argv[1],&end,10);
+    time_t start = strtol(argv[1],&end,10);
     if (strcmp(end,"\0")!=0){
         fprintf(stderr,"Invalid start : %s",argv[1]);
         fprintf(stderr,"Usage : ./taskcli START PERIOD CMD [ARG]...");
@@ -72,7 +78,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int period = strtol(argv[2],&end,10);
+    time_t period = strtol(argv[2],&end,10);
     if (strcmp(end,"\0")!=0){
         fprintf(stderr,"Invalid period : %s",argv[2]);
         fprintf(stderr,"Usage : ./taskcli START PERIOD CMD [ARG]...");
@@ -89,9 +95,8 @@ int main(int argc, char** argv) {
     write(fd,&start,sizeof(start));
     write(fd,&period,sizeof(period));
 
-    for(int i=3; i<argc; i++){
-        send_argv(fd,&argv[i]);
-    }
+    send_argv(fd,&argv[3]);
+    
     close(fd);
     kill(pidTaskD, SIGUSR1);
 

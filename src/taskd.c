@@ -3,6 +3,7 @@
 #include <asm-generic/errno-base.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -15,6 +16,8 @@ const char* LOCK_FILE = "/tmp/taskd.pid";
 const char* PIPE_FILE = "/tmp/tasks.fifo";
 const char* TEXT_FILE = "/tmp/tasks.txt";
 const char* TASK_DIR = "/tmp/tasks/";
+
+
 
 void check_lock(void) {
     const size_t BUFLEN = 32;
