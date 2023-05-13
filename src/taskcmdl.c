@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <time.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 static void free_argv(char** argv) {
     char** p = argv;
@@ -20,7 +22,14 @@ void taskcmd_destroy(struct taskcmd* self) {
     self->argv = NULL;
 }
 
-time_t taskcmd_next_exec(const struct taskcmd* self, time_t now) {
+bool taskcmd_now(const struct taskcmd *self, time_t now) {
+    return now == self->start ||
+        ( now > self->start &&
+          self->period != 0 &&
+          (self->start - now)%self->period == 0);
+}
+
+time_t taskcmd_next(const struct taskcmd* self, time_t now) {
     if(now < self->start) {
         return self->start;
     } else if (self->period == 0) {
@@ -28,6 +37,14 @@ time_t taskcmd_next_exec(const struct taskcmd* self, time_t now) {
     } else {
         return  now + self->period - (now - self->start)%self->period;
     }
+}
+
+void taskcmd_frepr(const struct taskcmd* self, FILE* file) {
+    fprintf(file, "%ld;%ld;%ld;", self->id, self->start, self->period);
+    for(char** arg=self->argv; *arg; ++arg) {
+        fprintf(file, "%s ", *arg);
+    }
+    fprintf(file, "\n");
 }
 
 // TASKCMDL
@@ -42,28 +59,25 @@ static void taskcmdl_remove(struct taskcmdl* self, size_t i) {
 }
 
 int taskcmdl_init(struct taskcmdl* self) {
+    self->next_id = 1;
     self->size = 0;
     self->alloc = TASKCMDL_BASEALLOC;
     self->tasks = calloc(self->alloc, sizeof(struct taskcmd));
     if(!self->tasks) {
         self->alloc = 0;
-        return -1;
+        return 1;
     }
     return 0;
 }
 
 void taskcmdl_destroy(struct taskcmdl* self) {
-    for(int i=0; i < self->size; ++i) {
+    for(size_t i=0; i < self->size; ++i) {
         taskcmd_destroy(&self->tasks[i]);
     }
     free(self->tasks);
     self->tasks = NULL;
     self->size = 0;
     self->alloc = 0;
-}
-
-size_t taskcmdl_size(const struct taskcmdl* self) {
-    return self->size;
 }
 
 int taskcmdl_add(struct taskcmdl* self, const struct taskcmd* task) {
@@ -76,33 +90,51 @@ int taskcmdl_add(struct taskcmdl* self, const struct taskcmd* task) {
         self->tasks = new;
     }
     self->tasks[self->size] = *task;
+    self->tasks[self->size].id = self->next_id;
     ++self->size;
-    return 0;
+    return self->next_id++;
 }
 
-struct taskcmd* taskcmdl_next(struct taskcmdl* self) {
-    time_t now = time(CLOCK_REALTIME);
-begin:
+time_t taskcmdl_next(struct taskcmdl *self, time_t now) {
     if(self->size == 0) {
-        return NULL;
+        return (time_t)-1;
     }
-    struct taskcmd* min_task = &self->tasks[0];
-    time_t min_time = taskcmd_next_exec(min_task, now);
-    if(min_time == (time_t)-1) { // remove the tasks that wont execute anymore
+
+    time_t min = taskcmd_next(&self->tasks[0], now);
+    if(min == (time_t)-1) { // remove the tasks that wont execute anymore
         taskcmdl_remove(self, 0);
-        goto begin;
+        return taskcmdl_next(self, now);
     }
-    for(int i=1; i < self->size; ++i) {
-        time_t t = taskcmd_next_exec(&self->tasks[i], now);
+    for(size_t i=1; i < self->size; ++i) {
+        time_t t = taskcmd_next(&self->tasks[i], now);
         if(t == (time_t)-1) { // remove the tasks that wont execute anymore
             taskcmdl_remove(self, i);
             --i;
             continue;
         }
-        if(t < min_time) {
-            min_time = t;
-            min_task = &self->tasks[i];
+        if(t < min) {
+            min = t;
         }
     }
-    return min_task;
+    return min;
+}
+
+struct taskcmd** taskcmdl_now(const struct taskcmdl *self, time_t now) {
+    struct taskcmd** tab = calloc(self->size+1, sizeof(struct taskcmdl*));
+    if(!tab) {
+        return NULL;
+    }
+    size_t n = 0;
+    struct taskcmd* p = self->tasks;
+    struct taskcmd* end = &self->tasks[self->size];
+    
+    for(; p != end; ++p) {
+        if(taskcmd_now(p, now)) {
+            tab[n++] = p;
+        }
+    }
+    
+    tab[n] = NULL;
+
+    return tab;
 }

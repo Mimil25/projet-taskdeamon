@@ -1,5 +1,6 @@
+#include <stddef.h>
+#define _XOPEN_SOURCE 700
 #include <time.h>
-#define _POSIX_SOURCE
 #include "message.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,28 +25,30 @@ int main(int argc, char** argv) {
         lock.l_whence = SEEK_SET;
         lock.l_start = 0;
         lock.l_len = 0;
+        lock.l_pid = getpid();
         
         int fd = open("/tmp/tasks.txt",O_RDONLY);
         if (fd == -1) {
             perror("Error opening tasks.txt");
             return 1;
         }
-        fcntl ( fd , F_SETLKW , &lock );
+
+        fcntl(fd, F_SETLKW, &lock);
 
         char buf[256];
 
-        int taille = lseek(fd,0,SEEK_END);
-        lseek(fd,0,SEEK_SET);
-        
-        if(taille==0){
+        size_t size = lseek(fd,0,SEEK_END);
+        if(size==0){
             fprintf(stdout,"No command to run.\n");
             lock.l_type = F_UNLCK;
-            fcntl ( fd , F_SETLKW , &lock );
+            fcntl ( fd , F_SETLK, &lock );
             close(fd);
             return 0;
         }
 
         size_t sz=-1;
+        
+        lseek(fd, 0, SEEK_SET);
 
         fprintf(stdout,"Commands to run :\n");
         while(sz!=0){
@@ -54,7 +57,7 @@ int main(int argc, char** argv) {
         }
 
         lock.l_type = F_UNLCK;
-        fcntl ( fd , F_SETLKW , &lock );
+        fcntl ( fd , F_SETLK, &lock );
         close(fd);
         return 0;
     }
@@ -69,9 +72,13 @@ int main(int argc, char** argv) {
     fclose(fPidTaskD);
 
     char *end = NULL;
-
-    time_t start = strtol(argv[1],&end,10);
-    if (strcmp(end,"\0")!=0){
+    time_t start;
+    if(argv[1][0] == '+') {
+        start = strtol(&argv[1][1],&end,10) + time(NULL);
+    } else {
+        start = strtol(argv[1],&end,10);
+    }
+    if (*end != '\0'){
         fprintf(stderr,"Invalid start : %s",argv[1]);
         fprintf(stderr,"Usage : ./taskcli START PERIOD CMD [ARG]...");
         fprintf(stderr,"Usage : ./taskcli");
@@ -79,14 +86,16 @@ int main(int argc, char** argv) {
     }
 
     time_t period = strtol(argv[2],&end,10);
-    if (strcmp(end,"\0")!=0){
+    if (*end != '\0'){
         fprintf(stderr,"Invalid period : %s",argv[2]);
         fprintf(stderr,"Usage : ./taskcli START PERIOD CMD [ARG]...");
         fprintf(stderr,"Usage : ./taskcli");
         return 1;
     }
+    
 
-    int fd = open("/tmp/tasks.fifo",O_APPEND);
+    kill(pidTaskD, SIGUSR1);
+    int fd = open("/tmp/tasks.fifo",O_WRONLY);
     if (fd == -1) {
         perror("Error opening tasks.fifo");
         return 1;
@@ -98,7 +107,6 @@ int main(int argc, char** argv) {
     send_argv(fd,&argv[3]);
     
     close(fd);
-    kill(pidTaskD, SIGUSR1);
 
     return 0;
 }
