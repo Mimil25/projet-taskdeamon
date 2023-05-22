@@ -2,6 +2,7 @@
 
 #include <bits/time.h>
 #include <bits/types/time_t.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <time.h>
 #include <stdlib.h>
@@ -49,8 +50,16 @@ void taskcmd_frepr(const struct taskcmd* self, FILE* file) {
 }
 
 pid_t taskcmd_launch(const struct taskcmd *self) {
+    const size_t BUFLEN = 64;
     pid_t pid = fork();
     if(pid == 0) {
+        char buf[BUFLEN];
+        snprintf(buf, BUFLEN, "/tmp/tasks/%ld.out", self->id);
+        freopen(buf, "a", stdout);
+        snprintf(buf, BUFLEN, "/tmp/tasks/%ld.err", self->id);
+        freopen(buf, "a", stderr);
+        freopen("/dev/null", "r", stdin);
+
         execvp(self->argv[0], &self->argv[0]);
         exit(1);
     }
