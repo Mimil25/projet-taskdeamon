@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <bits/types/siginfo_t.h>
 #include <stdbool.h>
+#include <sys/wait.h>
 
 const char* LOCK_FILE = "/tmp/taskd.pid";
 const char* PIPE_FILE = "/tmp/tasks.fifo";
@@ -82,20 +83,11 @@ void add_task(struct taskcmdl* tasks) {
     }
 }
 
-void launch_tasks(struct taskcmdl* tasks) {
+void launch_tasks(struct taskcmdl* tasks, int* nb_running) {
     time_t now = time(NULL);
-    struct taskcmd** tasks_to_launch = taskcmdl_now(tasks, now);
     
-    struct taskcmd** p = tasks_to_launch;
-    
-    printf("yay ?\n");
+    *nb_running += taskcmdl_launch_now(tasks, now);
 
-    while (*p) {
-        taskcmd_frepr(*p, stdout);
-        ++p;
-    }
-
-    free(tasks_to_launch);
     size_t size = tasks->size;
     time_t next = taskcmdl_next(tasks, now);
     if(next != (time_t)-1) {
@@ -110,15 +102,46 @@ void launch_tasks(struct taskcmdl* tasks) {
     }
 }
 
+void child_end(int* nb_running) {
+    int wstatus;
+    pid_t pid = wait(&wstatus);
+    if(WIFEXITED(wstatus)) {
+        int exit_status = WEXITSTATUS(wstatus);
+        printf("process %d exited with status %d\n", pid, exit_status);
+    } else if(WIFSIGNALED(wstatus)) { // the if statment is unnessecary
+        int sig = WTERMSIG(wstatus);
+        printf("process %d killed by signal %d\n", pid, sig);
+    }
+    *nb_running -= 1;
+}
+
+void quit(struct taskcmdl* tasks, int* nb_running) {
+    while (*nb_running) {
+        child_end(nb_running);
+    }
+    taskcmdl_destroy(tasks);
+    exit(EXIT_SUCCESS);
+}
+
 bool f_add_task = false;
-bool f_exec_task = false;
+bool f_launch_tasks = false;
+bool f_child_end = false;
+bool f_quit = false;
 void handler(int sig) {
     switch(sig) {
         case SIGUSR1:
             f_add_task = true;
             break;
         case SIGALRM:
-            f_exec_task = true;
+            f_launch_tasks = true;
+            break;
+        case SIGCHLD:
+            f_child_end = true;
+            break;
+        case SIGINT:
+        case SIGQUIT:
+        case SIGTERM:
+            f_quit = true;
             break;
     }
 }
@@ -145,6 +168,9 @@ void check_lock(void) {
 
 int main(int argc, char** argv) {
     check_lock();
+    //freopen("/tmp/taskd.out", "a", stdout);
+    //freopen("/tmp/taskd.err", "a", stderr);
+    setbuf(stderr, NULL);
 
     if(mkfifo(PIPE_FILE, 0666) && errno != EEXIST) {
         fprintf(stderr, "Error : failed to create %s, %s\n", PIPE_FILE, strerror(errno));
@@ -166,6 +192,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    int nb_running = 0;
     struct taskcmdl tasks;
     taskcmdl_init(&tasks);
     
@@ -176,11 +203,17 @@ int main(int argc, char** argv) {
 
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGALRM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGQUIT, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
     sigaddset(&set, SIGALRM);
+    sigaddset(&set, SIGINT);
+    sigaddset(&set, SIGQUIT);
+    sigaddset(&set, SIGTERM);
     sigprocmask(SIG_BLOCK, &set, NULL);
     
     sigemptyset(&set);
@@ -190,9 +223,17 @@ int main(int argc, char** argv) {
             f_add_task = false;
             add_task(&tasks);
         }
-        if(f_exec_task) {
-            f_exec_task = false;
-            launch_tasks(&tasks);
+        if(f_launch_tasks) {
+            f_launch_tasks = false;
+            launch_tasks(&tasks, &nb_running);
+        }
+        if(f_child_end) {
+            f_child_end = false;
+            child_end(&nb_running);
+        }
+        if(f_quit) {
+            f_quit = false;
+            quit(&tasks, &nb_running);
         }
     }
 

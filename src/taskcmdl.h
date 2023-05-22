@@ -5,7 +5,6 @@
 #include <stdio.h>
 #define TASKCMDL_BASEALLOC 16
 #define TASKCMDL_GROWRATE 2
-#define TASKCMDL_FREETHRESHOLD 3 // the alloc space must be TASKCMDL_FREETHRESHOLD times biger than size to free some space
 
 #include <bits/types/time_t.h>
 #include <stddef.h>
@@ -45,6 +44,12 @@ time_t taskcmd_next(const struct taskcmd* self, time_t now);
  * write a description of the task in file
  */
 void taskcmd_frepr(const struct taskcmd* self, FILE* file);
+
+/*
+ * launch the task in a new thread
+ * return the pid of the thread
+ */
+pid_t taskcmd_launch(const struct taskcmd* self);
 
 /*
  * a list of taskcmd
@@ -87,10 +92,9 @@ int taskcmdl_add(struct taskcmdl* self, const struct taskcmd* task);
 time_t taskcmdl_next(struct taskcmdl* self, time_t now);
 
 /*
- * return a NULL terminated list of pointers to taskcmd structs that should execute 
- * the list should be freed but NOT the taskcmd structs
- * the pointers to taskcmd structs are valid until the taskcmdl is modified
+ * launch the tasks that should be launched now
+ * return the number of launched tasks
  */
-struct taskcmd** taskcmdl_now(const struct taskcmdl* self, time_t now);
+int taskcmdl_launch_now(const struct taskcmdl* self, time_t now);
 
 #endif // TASKCMDL

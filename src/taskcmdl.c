@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <unistd.h>
 
 static void free_argv(char** argv) {
     char** p = argv;
@@ -45,6 +46,15 @@ void taskcmd_frepr(const struct taskcmd* self, FILE* file) {
         fprintf(file, "%s ", *arg);
     }
     fprintf(file, "\n");
+}
+
+pid_t taskcmd_launch(const struct taskcmd *self) {
+    pid_t pid = fork();
+    if(pid == 0) {
+        execvp(self->argv[0], &self->argv[0]);
+        exit(1);
+    }
+    return pid;
 }
 
 // TASKCMDL
@@ -119,22 +129,16 @@ time_t taskcmdl_next(struct taskcmdl *self, time_t now) {
     return min;
 }
 
-struct taskcmd** taskcmdl_now(const struct taskcmdl *self, time_t now) {
-    struct taskcmd** tab = calloc(self->size+1, sizeof(struct taskcmdl*));
-    if(!tab) {
-        return NULL;
-    }
+int taskcmdl_launch_now(const struct taskcmdl *self, time_t now) {
     size_t n = 0;
     struct taskcmd* p = self->tasks;
     struct taskcmd* end = &self->tasks[self->size];
     
     for(; p != end; ++p) {
         if(taskcmd_now(p, now)) {
-            tab[n++] = p;
+            if(taskcmd_launch(p)) n++;
         }
     }
-    
-    tab[n] = NULL;
 
-    return tab;
+    return n;
 }
