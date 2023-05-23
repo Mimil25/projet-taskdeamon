@@ -1,15 +1,16 @@
 #ifndef TASKCMDL
 #define TASKCMDL
 
-#include <bits/types/timer_t.h>
-#include <stdio.h>
 #define TASKCMDL_BASEALLOC 16
 #define TASKCMDL_GROWRATE 2
 
+#include <bits/types/timer_t.h>
+#include <stdio.h>
 #include <bits/types/time_t.h>
 #include <stddef.h>
 #include <time.h>
 #include <stdbool.h>
+#include <sys/wait.h>
 
 /*
  * represent a programed task

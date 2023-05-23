@@ -42,6 +42,9 @@ FILE* open_text_file(char* mode) {
     return file;
 }
 
+/*
+ * close TEXT_FILE and remove the lock
+ */
 void close_text_file(FILE* file) {
     struct flock lock;
     lock.l_type = F_UNLCK;
@@ -59,7 +62,7 @@ void close_text_file(FILE* file) {
  * append it in the taskcmdl,
  * update tasks.txt
  */
-void add_task(struct taskcmdl* tasks) {
+void add_task(struct taskcmdl* tasks, int* nb_running) {
     struct taskcmd task;
     int pipe = open(PIPE_FILE, O_RDONLY);
     read(pipe, &task.start, sizeof(time_t));
@@ -78,11 +81,20 @@ void add_task(struct taskcmdl* tasks) {
     
     time_t now = time(NULL);
     time_t next = taskcmdl_next(tasks, now);
-    if(next != (time_t)-1) {
+    if(next == (time_t)-1) {
+        alarm(0);
+    } else {
         alarm(next - now);
+    }
+    if(taskcmd_now(&task, now)) {
+        taskcmd_launch(&task);
+        *nb_running += 1;
     }
 }
 
+/*
+ * launch the tasks that should be launched now
+ */
 void launch_tasks(struct taskcmdl* tasks, int* nb_running) {
     time_t now = time(NULL);
     
@@ -102,24 +114,32 @@ void launch_tasks(struct taskcmdl* tasks, int* nb_running) {
     }
 }
 
+/*
+ * handle the end of a child
+ */
 void child_end(int* nb_running) {
     int wstatus;
     pid_t pid = wait(&wstatus);
     if(WIFEXITED(wstatus)) {
         int exit_status = WEXITSTATUS(wstatus);
-        printf("process %d exited with status %d\n", pid, exit_status);
+        fprintf(stderr, "process %d exited with status %d\n", pid, exit_status);
     } else if(WIFSIGNALED(wstatus)) { // the if statment is unnessecary
         int sig = WTERMSIG(wstatus);
-        printf("process %d killed by signal %d\n", pid, sig);
+        fprintf(stderr, "process %d killed by signal %d\n", pid, sig);
     }
     *nb_running -= 1;
 }
 
+/*
+ * end the program properly
+ */
 void quit(struct taskcmdl* tasks, int* nb_running) {
+    kill(-1, SIGTERM);
     while (*nb_running) {
         child_end(nb_running);
     }
     taskcmdl_destroy(tasks);
+    unlink(LOCK_FILE);
     exit(EXIT_SUCCESS);
 }
 
@@ -146,6 +166,10 @@ void handler(int sig) {
     }
 }
 
+/*
+ * check that LOCK_FILE doesn't exist and create it
+ * if LOCK_FILE exist, exit
+ */
 void check_lock(void) {
     const size_t BUFLEN = 32;
     FILE* file = fopen(LOCK_FILE, "r");
@@ -168,8 +192,9 @@ void check_lock(void) {
 
 int main(int argc, char** argv) {
     check_lock();
-    //freopen("/tmp/taskd.out", "a", stdout);
-    //freopen("/tmp/taskd.err", "a", stderr);
+    freopen("/tmp/taskd.out", "a", stdout);
+    freopen("/tmp/taskd.err", "a", stderr);
+    setbuf(stdout, NULL);
     setbuf(stderr, NULL);
 
     if(mkfifo(PIPE_FILE, 0666) && errno != EEXIST) {
@@ -221,7 +246,7 @@ int main(int argc, char** argv) {
         sigsuspend(&set);
         if(f_add_task) {
             f_add_task = false;
-            add_task(&tasks);
+            add_task(&tasks, &nb_running);
         }
         if(f_launch_tasks) {
             f_launch_tasks = false;
