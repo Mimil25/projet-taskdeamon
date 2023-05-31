@@ -1,8 +1,12 @@
+#define _XOPEN_SOURCE 700
+
 #include "taskcmdl.h"
 
 #include <bits/time.h>
+#include <bits/types/sigset_t.h>
 #include <bits/types/time_t.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stddef.h>
 #include <time.h>
 #include <stdlib.h>
@@ -10,6 +14,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
+/*
+ * free a NULL terminated array of strings
+ */
 static void free_argv(char** argv) {
     char** p = argv;
     while (*p) {
@@ -60,7 +67,11 @@ pid_t taskcmd_launch(const struct taskcmd *self) {
         freopen(buf, "a", stderr);
         freopen("/dev/null", "r", stdin);
 
-        execvp(self->argv[0], &self->argv[0]);
+        sigset_t set;
+        sigemptyset(&set);
+        sigprocmask(SIG_SETMASK, &set, NULL);
+
+        execvp(self->argv[0], self->argv);
         exit(1);
     }
     return pid;
@@ -68,6 +79,10 @@ pid_t taskcmd_launch(const struct taskcmd *self) {
 
 // TASKCMDL
 
+/*
+ * remove an element of the tasklist
+ * don't keep the list in order
+ */
 static void taskcmdl_remove(struct taskcmdl* self, size_t i) {
     if(i >= self->size) return;
     taskcmd_destroy(&self->tasks[i]);

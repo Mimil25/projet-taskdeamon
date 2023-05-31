@@ -80,15 +80,15 @@ void add_task(struct taskcmdl* tasks, int* nb_running) {
     close_text_file(file);
     
     time_t now = time(NULL);
+    if(taskcmd_now(&task, now)) {
+        taskcmd_launch(&task);
+        *nb_running += 1;
+    }
     time_t next = taskcmdl_next(tasks, now);
     if(next == (time_t)-1) {
         alarm(0);
     } else {
         alarm(next - now);
-    }
-    if(taskcmd_now(&task, now)) {
-        taskcmd_launch(&task);
-        *nb_running += 1;
     }
 }
 
@@ -134,7 +134,7 @@ void child_end(int* nb_running) {
  * end the program properly
  */
 void quit(struct taskcmdl* tasks, int* nb_running) {
-    kill(-1, SIGTERM);
+    kill(0, SIGQUIT);
     while (*nb_running) {
         child_end(nb_running);
     }
@@ -190,8 +190,9 @@ void check_lock(void) {
     }
 }
 
-int main(int argc, char** argv) {
+int main(void) {
     check_lock();
+    
     freopen("/tmp/taskd.out", "a", stdout);
     freopen("/tmp/taskd.err", "a", stderr);
     setbuf(stdout, NULL);
@@ -228,6 +229,7 @@ int main(int argc, char** argv) {
 
     sigaction(SIGUSR1, &sa, NULL);
     sigaction(SIGALRM, &sa, NULL);
+    sigaction(SIGCHLD, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGQUIT, &sa, NULL);
@@ -236,6 +238,7 @@ int main(int argc, char** argv) {
     sigemptyset(&set);
     sigaddset(&set, SIGUSR1);
     sigaddset(&set, SIGALRM);
+    sigaddset(&set, SIGCHLD);
     sigaddset(&set, SIGINT);
     sigaddset(&set, SIGQUIT);
     sigaddset(&set, SIGTERM);
